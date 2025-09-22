@@ -1,0 +1,133 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>PDF → 4×6 Cropper (Multiple PDFs)</title>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 18px; max-width: 880px; margin: auto; }
+    input, button { font-size: 14px; margin-top: 8px; }
+    #preview { width: 288px; height: 432px; border: 1px solid #ddd; margin-top: 12px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    #message { color:#b00; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h2>PDF → 4×6 Cropper (Multiple PDFs)</h2>
+  <p>Upload one or more PDFs. Each page will be cropped with preset 4"×6" dimensions and combined into a single PDF.</p>
+
+  <div class="row">
+    <input id="fileInput" type="file" accept="application/pdf" multiple />
+    <button id="processBtn" disabled>Crop & Preview All</button>
+    <button id="downloadBtn" disabled>Download Combined PDF</button>
+  </div>
+
+  <div id="message"></div>
+
+  <h4>Preview (First Page)</h4>
+  <embed id="preview" type="application/pdf" width="288" height="432" />
+
+  <script>
+    (function () {
+      const fileInput = document.getElementById('fileInput');
+      const processBtn = document.getElementById('processBtn');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const preview = document.getElementById('preview');
+      const msg = document.getElementById('message');
+
+      let currentFiles = [];
+      let lastObjectUrl = null;
+      let lastBlob = null;
+
+      const TARGET_W = 288; // 4 in * 72 points/in
+      const TARGET_H = 432; // 6 in * 72 points/in
+
+      // Preset crop values
+      const CROP_X = 40;
+      const CROP_Y = 70;
+      const CROP_ZOOM = 0.9;
+
+      function setMessage(text, isError = true) {
+        msg.textContent = text || '';
+        msg.style.color = isError ? '#b00' : '#0a6';
+      }
+
+      fileInput.addEventListener('change', (ev) => {
+        setMessage('');
+        currentFiles = Array.from(ev.target.files || []);
+        processBtn.disabled = currentFiles.length === 0;
+        downloadBtn.disabled = true;
+        preview.removeAttribute("src");
+        lastBlob = null;
+      });
+
+      processBtn.addEventListener('click', async () => {
+        setMessage('');
+        processBtn.disabled = true;
+        downloadBtn.disabled = true;
+        preview.removeAttribute("src");
+        if (lastObjectUrl) { URL.revokeObjectURL(lastObjectUrl); lastObjectUrl = null; }
+
+        if (currentFiles.length === 0) {
+          setMessage('No files selected.');
+          processBtn.disabled = false;
+          return;
+        }
+
+        try {
+          const combinedPdf = await PDFLib.PDFDocument.create();
+
+          for (const file of currentFiles) {
+            const arrayBuffer = await file.arrayBuffer();
+            const srcPdf = await PDFLib.PDFDocument.load(arrayBuffer);
+            const pages = srcPdf.getPages();
+
+            for (const srcPage of pages) {
+              const { width: w, height: h } = srcPage.getSize();
+
+              // Crop rectangle
+              const cropW = TARGET_W / CROP_ZOOM;
+              const cropH = TARGET_H / CROP_ZOOM;
+              const left = CROP_X;
+              const bottom = h - CROP_Y - cropH;
+
+              const embedded = await combinedPdf.embedPage(srcPage, {
+                left: left,
+                right: left + cropW,
+                bottom: bottom,
+                top: bottom + cropH
+              });
+
+              const newPage = combinedPdf.addPage([TARGET_W, TARGET_H]);
+              newPage.drawPage(embedded, { x: 0, y: 0, width: TARGET_W, height: TARGET_H });
+            }
+          }
+
+          const outBytes = await combinedPdf.save();
+          lastBlob = new Blob([outBytes], { type: 'application/pdf' });
+          lastObjectUrl = URL.createObjectURL(lastBlob);
+
+          preview.src = lastObjectUrl;
+          downloadBtn.disabled = false;
+          processBtn.disabled = false;
+          setMessage('All PDFs cropped and combined — click Download to save.', false);
+
+        } catch (err) {
+          console.error(err);
+          setMessage('Processing failed. Open browser console to see the error.');
+          processBtn.disabled = false;
+        }
+      });
+
+      downloadBtn.addEventListener('click', () => {
+        if (!lastBlob) return;
+        const a = document.createElement('a');
+        a.href = lastObjectUrl;
+        a.download = 'combined-cropped-4x6.pdf';
+        a.click();
+      });
+
+    })();
+  </script>
+</body>
+</html>
