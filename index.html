@@ -3,45 +3,164 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>PDF → 4×6 Cropper (Multiple PDFs)</title>
+  <title>📐 PDF Tools</title>
   <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 18px; max-width: 880px; margin: auto; }
-    input, button { font-size: 14px; margin-top: 8px; }
-    #preview { width: 288px; height: 432px; border: 1px solid #ddd; margin-top: 12px; }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    #message { color:#b00; margin-top:8px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background-color: #f5f5f7;
+      color: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    h2 {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #111;
+    }
+
+    p {
+      font-size: 14px;
+      color: #555;
+      margin-bottom: 24px;
+      text-align: center;
+      max-width: 600px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      padding: 30px 30px 40px;
+      width: 100%;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+      color: #777;
+      font-size: 16px;
+    }
+
+    .upload-area.dragover {
+      border-color: #4a90e2;
+      background-color: #f0f6ff;
+      color: #333;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #processBtn { background-color: #4a90e2; color: white; }
+    #processBtn:hover:not(:disabled) { background-color: #3578c6; }
+    #downloadBtn { background-color: #34c759; color: white; }
+    #downloadBtn:hover:not(:disabled) { background-color: #28a745; }
+
+    #message { font-size: 14px; text-align: center; }
+    #fileCount { font-size: 14px; text-align: center; color: #555; }
+
+    #preview {
+      width: 100%;
+      height: 432px;
+      border-radius: 12px;
+      border: 1px solid #ddd;
+      margin-top: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    #progressContainer {
+      width: 100%;
+      background: #eee;
+      height: 10px;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    #progressBar {
+      height: 100%;
+      width: 0;
+      background: #4a90e2;
+      transition: width 0.1s;
+    }
+
+    @media(max-width: 500px) {
+      .upload-area { padding: 30px 15px; font-size: 14px; }
+      button { flex: 1 1 100%; }
+    }
   </style>
 </head>
 <body>
-  <h2>PDF → 4×6 Cropper (Multiple PDFs)</h2>
-  <p>Upload one or more PDFs. Each page will be cropped with preset 4"×6" dimensions and combined into a single PDF.</p>
+  <h2>📐 PDF Tools</h2>
+  <p>Upload one or more PDFs. Each page will be cropped with a label preset of 4"×6" and combined into a single PDF.</p>
 
-  <div class="row">
-    <input id="fileInput" type="file" accept="application/pdf" multiple />
-    <button id="processBtn" disabled>Crop & Preview All</button>
-    <button id="downloadBtn" disabled>Download Combined PDF</button>
+  <div class="card">
+    <div id="uploadArea" class="upload-area">
+      Drag & drop PDFs here or click to select files
+    </div>
+    <div id="fileCount"></div>
+    <div class="buttons">
+      <button id="processBtn" disabled>Crop & Preview All</button>
+      <button id="downloadBtn" disabled>Download Combined PDF</button>
+    </div>
+
+    <div id="message"></div>
+    <div id="progressContainer"><div id="progressBar"></div></div>
+
+    <h4>Crop Preview</h4>
+    <embed id="preview" type="application/pdf" width="100%" height="432" />
   </div>
 
-  <div id="message"></div>
-
-  <h4>Preview (First Page)</h4>
-  <embed id="preview" type="application/pdf" width="288" height="432" />
+  <input id="fileInput" type="file" accept="application/pdf" multiple style="display:none;" />
 
   <script>
     (function () {
       const fileInput = document.getElementById('fileInput');
+      const uploadArea = document.getElementById('uploadArea');
       const processBtn = document.getElementById('processBtn');
       const downloadBtn = document.getElementById('downloadBtn');
       const preview = document.getElementById('preview');
       const msg = document.getElementById('message');
+      const fileCountEl = document.getElementById('fileCount');
+      const progressBar = document.getElementById('progressBar');
 
       let currentFiles = [];
       let lastObjectUrl = null;
       let lastBlob = null;
 
-      const TARGET_W = 288; // 4 in * 72 points/in
-      const TARGET_H = 432; // 6 in * 72 points/in
+      const TARGET_W = 288;
+      const TARGET_H = 432;
 
       // Preset crop values
       const CROP_X = 40;
@@ -53,13 +172,35 @@
         msg.style.color = isError ? '#b00' : '#0a6';
       }
 
-      fileInput.addEventListener('change', (ev) => {
-        setMessage('');
-        currentFiles = Array.from(ev.target.files || []);
+      function updateFileCount() {
+        fileCountEl.textContent = currentFiles.length
+          ? `${currentFiles.length} file(s) selected`
+          : '';
+      }
+
+      function handleFiles(files) {
+        currentFiles = Array.from(files);
         processBtn.disabled = currentFiles.length === 0;
         downloadBtn.disabled = true;
         preview.removeAttribute("src");
         lastBlob = null;
+        updateFileCount();
+        setMessage('');
+        progressBar.style.width = '0%';
+      }
+
+      uploadArea.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (ev) => handleFiles(ev.target.files));
+
+      uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+      });
+      uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+      uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
       });
 
       processBtn.addEventListener('click', async () => {
@@ -77,6 +218,14 @@
 
         try {
           const combinedPdf = await PDFLib.PDFDocument.create();
+          let totalPages = 0;
+          for (const file of currentFiles) {
+            const arrayBuffer = await file.arrayBuffer();
+            const srcPdf = await PDFLib.PDFDocument.load(arrayBuffer);
+            totalPages += srcPdf.getPages().length;
+          }
+
+          let processedPages = 0;
 
           for (const file of currentFiles) {
             const arrayBuffer = await file.arrayBuffer();
@@ -85,8 +234,6 @@
 
             for (const srcPage of pages) {
               const { width: w, height: h } = srcPage.getSize();
-
-              // Crop rectangle
               const cropW = TARGET_W / CROP_ZOOM;
               const cropH = TARGET_H / CROP_ZOOM;
               const left = CROP_X;
@@ -101,6 +248,9 @@
 
               const newPage = combinedPdf.addPage([TARGET_W, TARGET_H]);
               newPage.drawPage(embedded, { x: 0, y: 0, width: TARGET_W, height: TARGET_H });
+
+              processedPages++;
+              progressBar.style.width = `${Math.round((processedPages/totalPages)*100)}%`;
             }
           }
 
@@ -127,7 +277,6 @@
         a.download = 'combined-cropped-4x6.pdf';
         a.click();
       });
-
     })();
   </script>
 </body>
