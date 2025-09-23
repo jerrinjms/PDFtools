@@ -8,7 +8,8 @@ I use a shipping platform called ChitChats in Canada to ship to US. While genera
 Download the index.html file and open it using a chrominum based browser.
 ### PDF Crop Tool
 This lets you select any PDF doc, and crop them into the standard 4x6 in shipping label format. 
-_As of now it works only with labels from ChitChats. But feel free to play with the crop X, Y and zoom values to make it work with any label size_
+_As of now it works only with labels from ChitChats. But feel free to play with the crop X, Y and zoom values to make it work with any label size_.
+
 If you selected multiple PDF files, they will be cropped and combined into one multipage PDF DOC.
 ### PDF Address Generator Tool
 I use the same label stock to print addresses for local shipping in canada. I used to realy on Photoshop for this as well. But this couldn't be more simple.
